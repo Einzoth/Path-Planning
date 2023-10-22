@@ -16,7 +16,7 @@ INITIAL_EPSILON = 0.5       #最优选择动作百分比
 FINAL_EPSILON = 0.01
 GAMMA = 0.9                 #奖励递减参数
 TARGET_REPLACE_ITER = 200   #Q现实网络的更新频率
-MEMORY_CAPACITY = 80000     #记忆库大小
+MEMORY_CAPACITY = 100000     #记忆库大小
 SIZE = 9
 
 class SumTree(object):
@@ -127,27 +127,27 @@ class Memory(object):
 class Net(nn.Module):
 	def __init__(self, n_feature, n_hidden, n_actions):
 		super(Net, self).__init__()
-		# self.conv1 = nn.Conv2d(
-		# 	in_channels=4,
-		# 	out_channels=4,
-		# 	kernel_size=5,
-		# 	stride=1,
-		# 	padding=2
-		# )
-		# self.conv2 = nn.Conv2d(
-		# 	in_channels=4,
-		# 	out_channels=4,
-		# 	kernel_size=3,
-		# 	stride=1,
-		# 	padding=1
-		# )
-		# self.conv3 = nn.Conv2d(
-		# 	in_channels=4,
-		# 	out_channels=4,
-		# 	kernel_size=3,
-		# 	stride=1,
-		# 	padding=1
-		# )
+		self.conv1 = nn.Conv2d(
+			in_channels=4,
+			out_channels=4,
+			kernel_size=5,
+			stride=1,
+			padding=2
+		)
+		self.conv2 = nn.Conv2d(
+			in_channels=4,
+			out_channels=4,
+			kernel_size=3,
+			stride=1,
+			padding=1
+		)
+		self.conv3 = nn.Conv2d(
+			in_channels=4,
+			out_channels=4,
+			kernel_size=3,
+			stride=1,
+			padding=1
+		)
 
 		self.lstm = nn.LSTM(
 			input_size = 36,
@@ -157,19 +157,21 @@ class Net(nn.Module):
 
 		self.fc1 = nn.Linear(n_feature * 4, n_hidden)
 		self.fc2 = nn.Linear(n_hidden, 64)
+		# self.fc3 = nn.Linear(96, 32)
 		self.values = nn.Linear(64,1)
 		self.advantage = nn.Linear(64,n_actions)
 
 	def forward(self, x):
-		# x = F.relu(self.conv1(x))
-		# x = F.relu(self.conv2(x))
-		# x = F.relu(self.conv3(x))
+		x = F.relu(self.conv1(x))
+		x = F.relu(self.conv2(x))
+		x = F.relu(self.conv3(x))
 		x = einops.rearrange(x, 'b c h w -> h b (c w)')
 		x, (h, c) = self.lstm(x)
 		x = x.view(x.size(1), -1)
 		# print(x)
 		x = F.relu(self.fc1(x))
 		x = F.relu(self.fc2(x))
+		# x = F.relu(self.fc3(x))
 		value = self.values(x)
 		advantages = self.advantage(x)
 		actions_value = value + (advantages - torch.mean(advantages, dim=1, keepdim=True))
@@ -177,7 +179,7 @@ class Net(nn.Module):
 		return actions_value
 
 class DeepQNetwork():
-	def __init__(self, n_actions, n_features, n_hidden = 256,
+	def __init__(self, n_actions, n_features, n_hidden = 128,
 				):
 		self.n_actions = n_actions
 		self.n_features = n_features
@@ -207,6 +209,7 @@ class DeepQNetwork():
 		# actions_value = actions_value + danger
 		if np.random.uniform() >= self.epsilon:
 			action = torch.max(actions_value, dim=1)[1]
+			action = action.item()
 		else:
 			action = np.random.randint(0, self.n_actions)
 		self.timestep += 1
@@ -225,6 +228,7 @@ class DeepQNetwork():
 			#90%会选择Q值最大的动作
 			actions_value = self.eval_net(state_current)
 			action = torch.max(actions_value, dim=1)[1]
+			action = action.item()
 			if action == action_p:
 				action = np.random.choice(action_back)
 		else:
@@ -291,6 +295,16 @@ class DeepQNetwork():
 
 	def plot_cost(self):
 		plt.plot(np.arange(len(self.cost_his)), self.cost_his)
+		plt.ylabel('Lost')
+		plt.xlabel('training steps')
+		plt.show()
+
+	def plot_cost1(self):
+		xx = []
+		for i in range(len(self.cost_his)):
+			if (i / 5) == 0:
+				xx.append(self.cost_his[i])
+		plt.plot(np.arange(len(xx)), xx)
 		plt.ylabel('Lost')
 		plt.xlabel('training steps')
 		plt.show()
